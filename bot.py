@@ -48,19 +48,24 @@ def make_chrome_browser(*options: str) -> webdriver.Chrome:
 
     return browser
 
-def wait_for_button_with_refresh(browser, max_attempts=100, refresh_interval=3):
+def wait_for_button_with_refresh(browser, refresh_interval=3):
     """
     Aguarda o botão ficar disponível, fazendo refresh da página periodicamente.
-    Retorna True se o botão for encontrado, False se exceder o número máximo de tentativas.
+    Continua infinitamente até o botão ser encontrado.
     """
     attempt = 0
     
-    while attempt < max_attempts:
+    while True:  # Loop infinito
         try:
-            print(f"Tentativa {attempt + 1}/{max_attempts} - Verificando disponibilidade do botão...")
+            attempt += 1
+            print(f"Tentativa {attempt} - Verificando disponibilidade do botão...")
             
-            # Tenta encontrar o botão
-            botao_selecionar_turma = WebDriverWait(browser, 3).until(
+            # Verifica se há erro na página antes de procurar o botão
+            if check_and_restart_if_error(browser):
+                raise Exception("Erro detectado durante espera do botão - navegador será reiniciado")
+            
+            # Tenta encontrar o botão com timeout maior para sites lentos
+            botao_selecionar_turma = WebDriverWait(browser, 10).until(
                 EC.element_to_be_clickable((By.ID, "form:selecionarTurma"))
             )
             
@@ -72,54 +77,147 @@ def wait_for_button_with_refresh(browser, max_attempts=100, refresh_interval=3):
             
         except TimeoutException:
             print(f"Botão ainda não disponível. Fazendo refresh da página em {refresh_interval} segundos...")
-            attempt += 1
             
-            if attempt < max_attempts:
-                # Faz refresh da página
-                browser.refresh()
-                print("Página atualizada. Aguardando carregamento...")
-                time.sleep(3)  # Aguarda o carregamento da página
+            # Faz refresh da página
+            browser.refresh()
+            print("Página atualizada. Aguardando carregamento...")
+            time.sleep(5)  # Aumentado para 5 segundos para sites lentos
+            
+            # Verifica se há erro após o refresh
+            if check_and_restart_if_error(browser):
+                raise Exception("Erro detectado após refresh - navegador será reiniciado")
+            
+            # Tenta navegar novamente para a página de matrícula se necessário
+            try:
+                print("Navegando novamente para a página de matrícula...")
+                elemento = WebDriverWait(browser, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']"))
+                )
+                elemento.click()
                 
-                # Tenta navegar novamente para a página de matrícula se necessário
-                try:
-                    elemento = browser.find_element(By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']")
-                    elemento.click()
-                    elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]")
-                    elemento.click()
-                    elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]")
-                    elemento.click()
-                    
-                    # Preenche novamente o nome da matéria
-                    botao_nome_materia = WebDriverWait(browser, 3).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
-                    botao_nome_materia.click()
-                    search_input_nome_materia = WebDriverWait(browser, 3).until(
-                        EC.presence_of_element_located((By.ID, 'form:txtNome'))
-                    )
-                    search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
-                    search_input_nome_materia.send_keys(Keys.ENTER)
-                    
-                except Exception as nav_error:
-                    print(f"Erro ao navegar após refresh: {nav_error}")
-                    continue
+                elemento = WebDriverWait(browser, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]"))
+                )
+                elemento.click()
                 
-                time.sleep(refresh_interval)
-            else:
-                print("Número máximo de tentativas excedido. Botão não ficou disponível.")
-                return False
+                elemento = WebDriverWait(browser, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]"))
+                )
+                elemento.click()
+                
+                # Preenche novamente o nome da matéria
+                print("Preenchendo novamente o nome da matéria...")
+                botao_nome_materia = WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
+                botao_nome_materia.click()
+                search_input_nome_materia = WebDriverWait(browser, 10).until(
+                    EC.presence_of_element_located((By.ID, 'form:txtNome'))
+                )
+                search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
+                search_input_nome_materia.send_keys(Keys.ENTER)
+                print("Nome da matéria preenchido novamente com sucesso!")
+                
+                # Verifica se há erro após preencher novamente
+                if check_and_restart_if_error(browser):
+                    raise Exception("Erro detectado após preencher matéria novamente - navegador será reiniciado")
+                
+            except Exception as nav_error:
+                print(f"Erro ao navegar após refresh: {nav_error}")
+                print("Continuando para próxima tentativa...")
+                continue
+            
+            time.sleep(refresh_interval)
     
+    return False
+
+def detect_error_page(browser):
+    """
+    Detecta se a página atual é uma página de erro do site.
+    Retorna True se for uma página de erro, False caso contrário.
+    """
+    try:
+        # Verifica se há mensagens de erro comuns
+        error_indicators = [
+            "//div[contains(text(), 'Erro')]",
+            "//div[contains(text(), 'Error')]",
+            "//div[contains(text(), 'Falha')]",
+            "//div[contains(text(), 'Problema')]",
+            "//div[contains(text(), 'Sistema indisponível')]",
+            "//div[contains(text(), 'Serviço temporariamente indisponível')]",
+            "//div[contains(text(), 'Timeout')]",
+            "//div[contains(text(), 'Sessão expirada')]",
+            "//div[contains(text(), 'Acesso negado')]",
+            "//div[contains(text(), 'Página não encontrada')]",
+            "//div[contains(text(), '404')]",
+            "//div[contains(text(), '500')]",
+            "//div[contains(text(), '503')]",
+            "//div[contains(@class, 'error')]",
+            "//div[contains(@class, 'Error')]",
+            "//span[contains(text(), 'Erro')]",
+            "//span[contains(text(), 'Error')]",
+            "//p[contains(text(), 'Erro')]",
+            "//p[contains(text(), 'Error')]"
+        ]
+        
+        for indicator in error_indicators:
+            try:
+                error_element = browser.find_element(By.XPATH, indicator)
+                if error_element.is_displayed():
+                    print(f"Página de erro detectada: {error_element.text}")
+                    return True
+            except:
+                continue
+        
+        # Verifica se a URL contém indicadores de erro
+        current_url = browser.current_url
+        error_urls = ['error', 'erro', 'fail', 'falha', 'timeout', 'expired', 'denied', '404', '500', '503']
+        
+        for error_term in error_urls:
+            if error_term.lower() in current_url.lower():
+                print(f"URL de erro detectada: {current_url}")
+                return True
+        
+        # Verifica se o título da página indica erro
+        page_title = browser.title.lower()
+        error_titles = ['erro', 'error', 'falha', 'fail', 'problema', 'problem', 'indisponível', 'unavailable']
+        
+        for error_term in error_titles:
+            if error_term in page_title:
+                print(f"Título de erro detectado: {browser.title}")
+                return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"Erro ao verificar página de erro: {e}")
+        return False
+
+def check_and_restart_if_error(browser):
+    """
+    Verifica se há erro na página e reinicia o navegador se necessário.
+    Retorna True se reiniciou, False se não há erro.
+    """
+    if detect_error_page(browser):
+        print("Página de erro detectada! Reiniciando navegador...")
+        try:
+            browser.quit()
+        except:
+            pass
+        return True
     return False
 
 def main():
     browser = None
     try:
         # Seu código principal aqui
-        TIME_TO_WAIT = 0.1
+        TIME_TO_WAIT = 10  # Aumentado para 10 segundos para sites lentos
 
         options = ()
         browser = make_chrome_browser(*options)
 
+        print("Acessando página de login...")
         browser.get('https://autenticacao.unb.br/sso-server/login?service=https://sig.unb.br/sigaa/login/cas')
 
+        print("Aguardando campos de login carregarem...")
         search_input_username = WebDriverWait(browser, TIME_TO_WAIT).until(
             EC.presence_of_element_located(
                 (By.NAME, 'username')
@@ -132,24 +230,60 @@ def main():
             )
         )
 
+        print("Preenchendo credenciais...")
         search_input_username.send_keys(MATRICULA)
         search_input_password.send_keys(SENHA)
         search_input_password.send_keys(Keys.ENTER)
 
-        botao_ciente = WebDriverWait(browser, 10).until(
+        # Aguarda um pouco para o login processar
+        time.sleep(3)
+        
+        # Verifica se o login foi bem-sucedido (procura por elementos que só aparecem após login)
+        try:
+            print("Verificando se o login foi bem-sucedido...")
+            WebDriverWait(browser, 15).until(
+                EC.presence_of_element_located((By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']"))
+            )
+            print("Login realizado com sucesso!")
+        except TimeoutException:
+            raise Exception("Login falhou - não foi possível acessar o menu principal após o login")
+
+        # Verifica se há erro na página após login
+        if check_and_restart_if_error(browser):
+            raise Exception("Erro detectado após login - navegador será reiniciado")
+
+        print("Aguardando botão 'Ciente' aparecer...")
+        botao_ciente = WebDriverWait(browser, TIME_TO_WAIT).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'btn-primary') and text()='Ciente']"))
         )
         botao_ciente.click()
         print("Botão 'Ciente' clicado com sucesso!")
 
-        elemento = browser.find_element(By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']")
+        # Verifica se há erro após clicar no botão Ciente
+        if check_and_restart_if_error(browser):
+            raise Exception("Erro detectado após botão Ciente - navegador será reiniciado")
+
+        print("Navegando para menu de matrícula...")
+        elemento = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.element_to_be_clickable((By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']"))
+        )
         elemento.click()
-        elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]")
+        
+        elemento = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.element_to_be_clickable((By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]"))
+        )
         elemento.click()
 
-        elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]")
+        elemento = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.element_to_be_clickable((By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]"))
+        )
         elemento.click()
 
+        # Verifica se há erro após navegar para a página de matrícula
+        if check_and_restart_if_error(browser):
+            raise Exception("Erro detectado na página de matrícula - navegador será reiniciado")
+
+        print("Preenchendo nome da matéria...")
         botao_nome_materia = WebDriverWait(browser, TIME_TO_WAIT).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
         botao_nome_materia.click()
 
@@ -162,6 +296,10 @@ def main():
         search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
         search_input_nome_materia.send_keys(Keys.ENTER)
 
+        # Verifica se há erro após preencher o nome da matéria
+        if check_and_restart_if_error(browser):
+            raise Exception("Erro detectado após preencher matéria - navegador será reiniciado")
+
         '''
         search_input_horario_materia = WebDriverWait(browser, TIME_TO_WAIT).until(
             EC.presence_of_element_located(
@@ -173,6 +311,7 @@ def main():
         search_input_horario_materia.send_keys(Keys.ENTER)
         '''
         
+        print("Aguardando botão 'Selecionar Turma' ficar disponível...")
         # Aguarda o botão ficar disponível com refresh automático
         if not wait_for_button_with_refresh(browser):
             raise Exception("Botão não ficou disponível após todas as tentativas")
@@ -289,10 +428,12 @@ def main():
         raise  # Re-lança a exceção para o loop externo
 
 if __name__ == '__main__':
-    consecutive_errors = 0
-    max_consecutive_errors = 3
+    print("Script iniciado! Para parar, pressione Ctrl+C no terminal.")
+    print("O script continuará tentando infinitamente até conseguir a matrícula OU ser interrompido manualmente.")
+    print("Detecção automática de erros ativada - navegador será reiniciado quando necessário.")
     
     while True:
+        browser = None
         try:
             print(f"\n{'='*50}")
             print("Iniciando nova tentativa de matrícula...")
@@ -301,15 +442,32 @@ if __name__ == '__main__':
             success = main()
             if success:
                 print("Processo concluído com sucesso!")
-                break
+                print("Matrícula realizada! Encerrando o script.")
+                if browser:
+                    try:
+                        browser.quit()
+                    except:
+                        pass
+                break  # Para o loop após sucesso
                 
+        except KeyboardInterrupt:
+            print("\n\nScript interrompido pelo usuário (Ctrl+C). Encerrando...")
+            if browser:
+                try:
+                    browser.quit()
+                except:
+                    pass
+            break
         except Exception as e:
-            consecutive_errors += 1
-            print(f"Erro detectado (tentativa {consecutive_errors}/{max_consecutive_errors}): {e}")
+            print(f"Erro detectado: {e}")
             
-            if consecutive_errors >= max_consecutive_errors:
-                print("Número máximo de erros consecutivos atingido. Encerrando programa.")
-                break
+            # Garante que o navegador seja fechado
+            if browser:
+                try:
+                    print("Fechando navegador...")
+                    browser.quit()
+                except:
+                    pass
             
             print(f"Aguardando 20 segundos antes de tentar novamente...")
             time.sleep(20)
