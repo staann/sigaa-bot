@@ -220,7 +220,7 @@ def main():
     browser = None
     try:
         # Seu código principal aqui
-        TIME_TO_WAIT = 2  # Aumentado para 10 segundos para sites lentos
+        TIME_TO_WAIT = 0.5 # Aumentado para 0.5 segundos
 
         options = ()
         browser = make_chrome_browser(*options)
