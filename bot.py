@@ -48,7 +48,7 @@ def make_chrome_browser(*options: str) -> webdriver.Chrome:
 
     return browser
 
-def wait_for_button_with_refresh(browser, refresh_interval=3):
+def aguardar_botao_com_refresh(browser, refresh_interval=3):
     """
     Aguarda o botão ficar disponível, fazendo refresh da página periodicamente.
     Continua infinitamente até o botão ser encontrado.
@@ -61,7 +61,7 @@ def wait_for_button_with_refresh(browser, refresh_interval=3):
             print(f"Tentativa {attempt} - Verificando disponibilidade do botão...")
             
             # Verifica se há erro na página antes de procurar o botão
-            if check_and_restart_if_error(browser):
+            if verificar_e_reiniciar_se_erro(browser):
                 raise Exception("Erro detectado durante espera do botão - navegador será reiniciado")
             
             # Tenta encontrar o botão com timeout maior para sites lentos
@@ -84,7 +84,7 @@ def wait_for_button_with_refresh(browser, refresh_interval=3):
             time.sleep(5)  # Aumentado para 5 segundos para sites lentos
             
             # Verifica se há erro após o refresh
-            if check_and_restart_if_error(browser):
+            if verificar_e_reiniciar_se_erro(browser):
                 raise Exception("Erro detectado após refresh - navegador será reiniciado")
             
             # Tenta navegar novamente para a página de matrícula se necessário
@@ -117,7 +117,7 @@ def wait_for_button_with_refresh(browser, refresh_interval=3):
                 print("Nome da matéria preenchido novamente com sucesso!")
                 
                 # Verifica se há erro após preencher novamente
-                if check_and_restart_if_error(browser):
+                if verificar_e_reiniciar_se_erro(browser):
                     raise Exception("Erro detectado após preencher matéria novamente - navegador será reiniciado")
                 
             except Exception as nav_error:
@@ -129,7 +129,7 @@ def wait_for_button_with_refresh(browser, refresh_interval=3):
     
     return False
 
-def detect_error_page(browser):
+def detectar_pagina_erro(browser):
     """
     Detecta se a página atual é uma página de erro do site.
     Retorna True se for uma página de erro, False caso contrário.
@@ -146,6 +146,13 @@ def detect_error_page(browser):
             "//div[contains(text(), 'Timeout')]",
             "//div[contains(text(), 'Sessão expirada')]",
             "//div[contains(text(), 'Acesso negado')]",
+            "//div[contains(text(), 'Acesso bloqueado')]",
+            "//div[contains(text(), 'Acesso restrito')]",
+            "//div[contains(text(), 'Acesso não autorizado')]",
+            "//div[contains(text(), 'Usuário não autorizado')]",
+            "//div[contains(text(), 'Credenciais inválidas')]",
+            "//div[contains(text(), 'Login falhou')]",
+            "//div[contains(text(), 'Falha na autenticação')]",
             "//div[contains(text(), 'Página não encontrada')]",
             "//div[contains(text(), '404')]",
             "//div[contains(text(), '500')]",
@@ -154,8 +161,12 @@ def detect_error_page(browser):
             "//div[contains(@class, 'Error')]",
             "//span[contains(text(), 'Erro')]",
             "//span[contains(text(), 'Error')]",
+            "//span[contains(text(), 'Acesso negado')]",
+            "//span[contains(text(), 'Acesso bloqueado')]",
             "//p[contains(text(), 'Erro')]",
-            "//p[contains(text(), 'Error')]"
+            "//p[contains(text(), 'Error')]",
+            "//p[contains(text(), 'Acesso negado')]",
+            "//p[contains(text(), 'Acesso bloqueado')]"
         ]
         
         for indicator in error_indicators:
@@ -169,7 +180,7 @@ def detect_error_page(browser):
         
         # Verifica se a URL contém indicadores de erro
         current_url = browser.current_url
-        error_urls = ['error', 'erro', 'fail', 'falha', 'timeout', 'expired', 'denied', '404', '500', '503']
+        error_urls = ['error', 'erro', 'fail', 'falha', 'timeout', 'expired', 'denied', 'blocked', 'restricted', 'unauthorized', 'invalid', '404', '500', '503']
         
         for error_term in error_urls:
             if error_term.lower() in current_url.lower():
@@ -178,7 +189,7 @@ def detect_error_page(browser):
         
         # Verifica se o título da página indica erro
         page_title = browser.title.lower()
-        error_titles = ['erro', 'error', 'falha', 'fail', 'problema', 'problem', 'indisponível', 'unavailable']
+        error_titles = ['erro', 'error', 'falha', 'fail', 'problema', 'problem', 'indisponível', 'unavailable', 'negado', 'bloqueado', 'restrito', 'não autorizado', 'inválido']
         
         for error_term in error_titles:
             if error_term in page_title:
@@ -191,12 +202,12 @@ def detect_error_page(browser):
         print(f"Erro ao verificar página de erro: {e}")
         return False
 
-def check_and_restart_if_error(browser):
+def verificar_e_reiniciar_se_erro(browser):
     """
     Verifica se há erro na página e reinicia o navegador se necessário.
     Retorna True se reiniciou, False se não há erro.
     """
-    if detect_error_page(browser):
+    if detectar_pagina_erro(browser):
         print("Página de erro detectada! Reiniciando navegador...")
         try:
             browser.quit()
@@ -209,7 +220,7 @@ def main():
     browser = None
     try:
         # Seu código principal aqui
-        TIME_TO_WAIT = 10  # Aumentado para 10 segundos para sites lentos
+        TIME_TO_WAIT = 2  # Aumentado para 10 segundos para sites lentos
 
         options = ()
         browser = make_chrome_browser(*options)
@@ -236,7 +247,7 @@ def main():
         search_input_password.send_keys(Keys.ENTER)
 
         # Aguarda um pouco para o login processar
-        time.sleep(3)
+        time.sleep(2)
         
         # Verifica se o login foi bem-sucedido (procura por elementos que só aparecem após login)
         try:
@@ -249,7 +260,7 @@ def main():
             raise Exception("Login falhou - não foi possível acessar o menu principal após o login")
 
         # Verifica se há erro na página após login
-        if check_and_restart_if_error(browser):
+        if verificar_e_reiniciar_se_erro(browser):
             raise Exception("Erro detectado após login - navegador será reiniciado")
 
         print("Aguardando botão 'Ciente' aparecer...")
@@ -260,7 +271,7 @@ def main():
         print("Botão 'Ciente' clicado com sucesso!")
 
         # Verifica se há erro após clicar no botão Ciente
-        if check_and_restart_if_error(browser):
+        if verificar_e_reiniciar_se_erro(browser):
             raise Exception("Erro detectado após botão Ciente - navegador será reiniciado")
 
         print("Navegando para menu de matrícula...")
@@ -280,7 +291,7 @@ def main():
         elemento.click()
 
         # Verifica se há erro após navegar para a página de matrícula
-        if check_and_restart_if_error(browser):
+        if verificar_e_reiniciar_se_erro(browser):
             raise Exception("Erro detectado na página de matrícula - navegador será reiniciado")
 
         print("Preenchendo nome da matéria...")
@@ -297,7 +308,7 @@ def main():
         search_input_nome_materia.send_keys(Keys.ENTER)
 
         # Verifica se há erro após preencher o nome da matéria
-        if check_and_restart_if_error(browser):
+        if verificar_e_reiniciar_se_erro(browser):
             raise Exception("Erro detectado após preencher matéria - navegador será reiniciado")
 
         '''
@@ -313,7 +324,7 @@ def main():
         
         print("Aguardando botão 'Selecionar Turma' ficar disponível...")
         # Aguarda o botão ficar disponível com refresh automático
-        if not wait_for_button_with_refresh(browser):
+        if not aguardar_botao_com_refresh(browser):
             raise Exception("Botão não ficou disponível após todas as tentativas")
 
         try:
@@ -470,4 +481,4 @@ if __name__ == '__main__':
                     pass
             
             print(f"Aguardando 20 segundos antes de tentar novamente...")
-            time.sleep(20)
+            time.sleep(2)
