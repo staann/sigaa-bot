@@ -1,0 +1,315 @@
+# type: ignore
+# Selenium - Automatizando tarefas no navegador
+from pathlib import Path
+from time import sleep
+import time
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.common.alert import Alert
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementNotInteractableException
+
+# Chrome Options
+# https://peter.sh/experiments/chromium-command-line-switches/
+# Doc Selenium
+# https://selenium-python.readthedocs.io/locating-elements.html
+
+# Caminho para a raiz do projeto
+ROOT_FOLDER = Path(__file__).parent
+# Caminho para a pasta onde o chromedriver está
+CHROME_DRIVER_PATH = ROOT_FOLDER / 'driver' / 'chromedriver.exe'
+
+SENHA = '' #Substitua pela sua senha
+MATRICULA = '' #Substitua pela sua matricula
+DATA_NASCIMENTO = '' #Substitua pela sua data de nascimento
+CPF = '' #Substitua pelo seu CPF
+
+def make_chrome_browser(*options: str) -> webdriver.Chrome:
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_experimental_option("detach", True)
+
+    # chrome_options.add_argument('--headless')
+    if options is not None:
+        for option in options:
+            chrome_options.add_argument(option)
+
+    chrome_service = Service(
+        executable_path=str(CHROME_DRIVER_PATH),
+    )
+
+    browser = webdriver.Chrome(
+        service=chrome_service,
+        options=chrome_options
+    )
+
+    return browser
+
+def wait_for_button_with_refresh(browser, max_attempts=100, refresh_interval=3):
+    """
+    Aguarda o botão ficar disponível, fazendo refresh da página periodicamente.
+    Retorna True se o botão for encontrado, False se exceder o número máximo de tentativas.
+    """
+    attempt = 0
+    
+    while attempt < max_attempts:
+        try:
+            print(f"Tentativa {attempt + 1}/{max_attempts} - Verificando disponibilidade do botão...")
+            
+            # Tenta encontrar o botão
+            botao_selecionar_turma = WebDriverWait(browser, 3).until(
+                EC.element_to_be_clickable((By.ID, "form:selecionarTurma"))
+            )
+            
+            # Se chegou aqui, o botão está disponível
+            print("Botão 'Selecionar Turma' está disponível!")
+            botao_selecionar_turma.click()
+            print("Botão 'Selecionar Turma' clicado com sucesso!")
+            return True
+            
+        except TimeoutException:
+            print(f"Botão ainda não disponível. Fazendo refresh da página em {refresh_interval} segundos...")
+            attempt += 1
+            
+            if attempt < max_attempts:
+                # Faz refresh da página
+                browser.refresh()
+                print("Página atualizada. Aguardando carregamento...")
+                time.sleep(3)  # Aguarda o carregamento da página
+                
+                # Tenta navegar novamente para a página de matrícula se necessário
+                try:
+                    elemento = browser.find_element(By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']")
+                    elemento.click()
+                    elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]")
+                    elemento.click()
+                    elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]")
+                    elemento.click()
+                    
+                    # Preenche novamente o nome da matéria
+                    botao_nome_materia = WebDriverWait(browser, 3).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
+                    botao_nome_materia.click()
+                    search_input_nome_materia = WebDriverWait(browser, 3).until(
+                        EC.presence_of_element_located((By.ID, 'form:txtNome'))
+                    )
+                    search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
+                    search_input_nome_materia.send_keys(Keys.ENTER)
+                    
+                except Exception as nav_error:
+                    print(f"Erro ao navegar após refresh: {nav_error}")
+                    continue
+                
+                time.sleep(refresh_interval)
+            else:
+                print("Número máximo de tentativas excedido. Botão não ficou disponível.")
+                return False
+    
+    return False
+
+def main():
+    browser = None
+    try:
+        # Seu código principal aqui
+        TIME_TO_WAIT = 0.1
+
+        options = ()
+        browser = make_chrome_browser(*options)
+
+        browser.get('https://autenticacao.unb.br/sso-server/login?service=https://sig.unb.br/sigaa/login/cas')
+
+        search_input_username = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.presence_of_element_located(
+                (By.NAME, 'username')
+            )
+        )
+
+        search_input_password = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.presence_of_element_located(
+                (By.NAME, 'password')
+            )
+        )
+
+        search_input_username.send_keys(MATRICULA)
+        search_input_password.send_keys(SENHA)
+        search_input_password.send_keys(Keys.ENTER)
+
+        botao_ciente = WebDriverWait(browser, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'btn-primary') and text()='Ciente']"))
+        )
+        botao_ciente.click()
+        print("Botão 'Ciente' clicado com sucesso!")
+
+        elemento = browser.find_element(By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']")
+        elemento.click()
+        elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]")
+        elemento.click()
+
+        elemento = browser.find_element(By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]")
+        elemento.click()
+
+        botao_nome_materia = WebDriverWait(browser, TIME_TO_WAIT).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
+        botao_nome_materia.click()
+
+        search_input_nome_materia = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.presence_of_element_located(
+                (By.ID, 'form:txtNome')
+            )
+        )
+
+        search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
+        search_input_nome_materia.send_keys(Keys.ENTER)
+
+        '''
+        search_input_horario_materia = WebDriverWait(browser, TIME_TO_WAIT).until(
+            EC.presence_of_element_located(
+                (By.ID, 'form:txtHorario')
+            )
+        )    
+        search_input_horario_materia.send_keys('5M5 5T1')
+
+        search_input_horario_materia.send_keys(Keys.ENTER)
+        '''
+        
+        # Aguarda o botão ficar disponível com refresh automático
+        if not wait_for_button_with_refresh(browser):
+            raise Exception("Botão não ficou disponível após todas as tentativas")
+
+        try:
+            # Localiza o campo de entrada pelo ID
+            campo_data = WebDriverWait(browser, TIME_TO_WAIT).until(
+                EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:Data"))
+            )
+
+            # Clica no campo para focar nele
+            campo_data.click()
+
+            # Digita a data no campo
+            campo_data.send_keys(DATA_NASCIMENTO)  # Substitua pela data de nascimento desejada
+            print("Data inserida com sucesso!")
+
+            campo_senha = WebDriverWait(browser, TIME_TO_WAIT).until(
+                EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:senha"))
+            )
+            campo_senha.click()
+            campo_senha.send_keys(SENHA) #Substitua pela sua senha
+
+            campo_confirma = WebDriverWait(browser, TIME_TO_WAIT).until(
+                EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:btnConfirmar"))
+            )
+            campo_confirma.click()
+
+            alert = Alert(browser)
+
+            # Obtém o texto do pop-up
+            print("Texto do pop-up:", alert.text)
+
+            # Clica no botão "OK" (ou "Confirmar")
+            alert.accept()
+            print("Pop-up confirmado com sucesso!")
+
+        except Exception as e:
+            print(f"Primeira tentativa falhou: {e}")
+            
+            try:
+                campo_cpf = WebDriverWait(browser, TIME_TO_WAIT).until(
+                    EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:cpf"))
+                )
+
+                # Clica no campo para focar nele
+                campo_cpf.click()
+
+                # Digita o CPF no campo
+                campo_cpf.send_keys(CPF)  # Substitua pelo CPF desejado
+                print("CPF inserido com sucesso!")
+
+                campo_senha = WebDriverWait(browser, TIME_TO_WAIT).until(
+                    EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:senha"))
+                )
+                campo_senha.click()
+                campo_senha.send_keys(SENHA) #Substitua pela sua senha
+                print('senha inserida com sucesso!')
+                campo_confirma = WebDriverWait(browser, TIME_TO_WAIT).until(
+                    EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:btnConfirmar"))
+                )
+                campo_confirma.click()
+
+                alert = Alert(browser)
+
+                # Obtém o texto do pop-up
+                print("Texto do pop-up:", alert.text)
+
+                # Clica no botão "OK" (ou "Confirmar")
+                alert.accept()
+                print("Pop-up confirmado com sucesso!")
+
+            except Exception as e2:
+                print(f"Segunda tentativa falhou: {e2}")
+                
+                try:
+                    campo_cpf.send_keys(CPF)  # Substitua pelo CPF desejado
+                    print("CPF inserido com sucesso!")
+                    campo_confirma = WebDriverWait(browser, TIME_TO_WAIT).until(
+                        EC.element_to_be_clickable((By.ID, "j_id_jsp_334536566_1:btnConfirmar"))
+                    )
+                    campo_confirma.click()
+                    WebDriverWait(browser, TIME_TO_WAIT).until(EC.alert_is_present())
+
+                    # Muda o foco para o pop-up
+                    alert = Alert(browser)
+
+                    # Obtém o texto do pop-up
+                    print("Texto do pop-up:", alert.text)
+
+                    # Clica no botão "OK" (ou "Confirmar")
+                    alert.accept()
+                    print("Pop-up confirmado com sucesso!")
+                    
+                except Exception as e3:
+                    print(f"Terceira tentativa falhou: {e3}")
+                    raise Exception(f"Todas as tentativas de preenchimento falharam: {e3}")
+
+        print("Processo de matrícula concluído com sucesso!")
+        return True
+
+    except Exception as e:
+        print(f"Erro durante a execução: {e}")
+        
+        # Verifica se o elemento 'sair-sistema' está presente
+        if browser:
+            try:
+                elemento = browser.find_element(By.CLASS_NAME, 'sair-sistema')
+                elemento.click()
+                print("Elemento 'sair-sistema' encontrado e clicado.")
+            except:
+                print("Elemento 'sair-sistema' não encontrado.")
+        
+        raise  # Re-lança a exceção para o loop externo
+
+if __name__ == '__main__':
+    consecutive_errors = 0
+    max_consecutive_errors = 3
+    
+    while True:
+        try:
+            print(f"\n{'='*50}")
+            print("Iniciando nova tentativa de matrícula...")
+            print(f"{'='*50}")
+            
+            success = main()
+            if success:
+                print("Processo concluído com sucesso!")
+                break
+                
+        except Exception as e:
+            consecutive_errors += 1
+            print(f"Erro detectado (tentativa {consecutive_errors}/{max_consecutive_errors}): {e}")
+            
+            if consecutive_errors >= max_consecutive_errors:
+                print("Número máximo de erros consecutivos atingido. Encerrando programa.")
+                break
+            
+            print(f"Aguardando 20 segundos antes de tentar novamente...")
+            time.sleep(20)
