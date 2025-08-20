@@ -25,8 +25,8 @@ CHROME_DRIVER_PATH = ROOT_FOLDER / 'driver' / 'chromedriver.exe'
 
 SENHA = '' #Substitua pela sua senha
 MATRICULA = '' #Substitua pela sua matricula
-DATA_NASCIMENTO = '' #Substitua pela sua data de nascimento
-CPF = '' #Substitua pelo seu CPF
+DATA_NASCIMENTO = '' #Substitua pela sua data de nascimento (dia, mes, ano)(apenas numeros)
+CPF = '' #Substitua pelo seu CPF (sem pontos e traços)
 
 def make_chrome_browser(*options: str) -> webdriver.Chrome:
     chrome_options = webdriver.ChromeOptions()
@@ -48,7 +48,7 @@ def make_chrome_browser(*options: str) -> webdriver.Chrome:
 
     return browser
 
-def aguardar_botao_com_refresh(browser, refresh_interval=3):
+def aguardar_botao_com_refresh(browser, refresh_interval=1):
     """
     Aguarda o botão ficar disponível, fazendo refresh da página periodicamente.
     Continua infinitamente até o botão ser encontrado.
@@ -62,10 +62,12 @@ def aguardar_botao_com_refresh(browser, refresh_interval=3):
             
             # Verifica se há erro na página antes de procurar o botão
             if verificar_e_reiniciar_se_erro(browser):
-                raise Exception("Erro detectado durante espera do botão - navegador será reiniciado")
+                print("Navegador foi fechado devido a erro. Saindo da função...")
+                browser = None  # Define como None para indicar que foi fechado
+                return False
             
             # Tenta encontrar o botão com timeout maior para sites lentos
-            botao_selecionar_turma = WebDriverWait(browser, 10).until(
+            botao_selecionar_turma = WebDriverWait(browser, 2).until(
                 EC.element_to_be_clickable((By.ID, "form:selecionarTurma"))
             )
             
@@ -81,35 +83,37 @@ def aguardar_botao_com_refresh(browser, refresh_interval=3):
             # Faz refresh da página
             browser.refresh()
             print("Página atualizada. Aguardando carregamento...")
-            time.sleep(5)  # Aumentado para 5 segundos para sites lentos
+            time.sleep(0.1)  # Aumentado para 5 segundos para sites lentos
             
             # Verifica se há erro após o refresh
             if verificar_e_reiniciar_se_erro(browser):
-                raise Exception("Erro detectado após refresh - navegador será reiniciado")
+                print("Navegador foi fechado após refresh. Saindo da função...")
+                browser = None  # Define como None para indicar que foi fechado
+                return False
             
             # Tenta navegar novamente para a página de matrícula se necessário
             try:
                 print("Navegando novamente para a página de matrícula...")
-                elemento = WebDriverWait(browser, 10).until(
+                elemento = WebDriverWait(browser, 3).until(
                     EC.element_to_be_clickable((By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']"))
                 )
                 elemento.click()
                 
-                elemento = WebDriverWait(browser, 10).until(
+                elemento = WebDriverWait(browser, 3).until(
                     EC.element_to_be_clickable((By.XPATH, "//td[@class='ThemeOfficeMenuFolderText' and contains(text(), 'Matrícula On-Line')]"))
                 )
                 elemento.click()
                 
-                elemento = WebDriverWait(browser, 10).until(
+                elemento = WebDriverWait(browser, 3).until(
                     EC.element_to_be_clickable((By.XPATH, "//td[@class='ThemeOfficeMenuItemText' and contains(text(), 'Realizar Matrícula Extraordinária')]"))
                 )
                 elemento.click()
                 
                 # Preenche novamente o nome da matéria
                 print("Preenchendo novamente o nome da matéria...")
-                botao_nome_materia = WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
+                botao_nome_materia = WebDriverWait(browser, 3).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
                 botao_nome_materia.click()
-                search_input_nome_materia = WebDriverWait(browser, 10).until(
+                search_input_nome_materia = WebDriverWait(browser, 3).until(
                     EC.presence_of_element_located((By.ID, 'form:txtNome'))
                 )
                 search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
@@ -118,7 +122,9 @@ def aguardar_botao_com_refresh(browser, refresh_interval=3):
                 
                 # Verifica se há erro após preencher novamente
                 if verificar_e_reiniciar_se_erro(browser):
-                    raise Exception("Erro detectado após preencher matéria novamente - navegador será reiniciado")
+                    print("Navegador foi fechado após preencher matéria novamente. Saindo da função...")
+                    browser = None  # Define como None para indicar que foi fechado
+                    return False
                 
             except Exception as nav_error:
                 print(f"Erro ao navegar após refresh: {nav_error}")
@@ -208,19 +214,29 @@ def verificar_e_reiniciar_se_erro(browser):
     Retorna True se reiniciou, False se não há erro.
     """
     if detectar_pagina_erro(browser):
-        print("Página de erro detectada! Reiniciando navegador...")
+        print("Página de erro detectada! Fechando navegador...")
         try:
             browser.quit()
-        except:
-            pass
+            print("Navegador fechado com sucesso.")
+            # Aguarda um pouco para garantir que o processo seja finalizado
+            time.sleep(0.2)
+        except Exception as e:
+            print(f"Erro ao fechar navegador: {e}")
+            # Tenta fechar forçadamente
+            try:
+                browser.close()
+            except:
+                pass
+        # Define o browser como None para indicar que foi fechado
+        browser = None
         return True
     return False
 
 def main():
     browser = None
     try:
-        # Seu código principal aqui
-        TIME_TO_WAIT = 0.5 # Aumentado para 0.5 segundos
+        # código principal
+        TIME_TO_WAIT = 0.1
 
         options = ()
         browser = make_chrome_browser(*options)
@@ -247,12 +263,12 @@ def main():
         search_input_password.send_keys(Keys.ENTER)
 
         # Aguarda um pouco para o login processar
-        time.sleep(2)
+        time.sleep(0.1)
         
         # Verifica se o login foi bem-sucedido (procura por elementos que só aparecem após login)
         try:
             print("Verificando se o login foi bem-sucedido...")
-            WebDriverWait(browser, 15).until(
+            WebDriverWait(browser, 0.2).until(
                 EC.presence_of_element_located((By.XPATH, "//span[@class='ThemeOfficeMainFolderText' and text()='Ensino']"))
             )
             print("Login realizado com sucesso!")
@@ -261,7 +277,8 @@ def main():
 
         # Verifica se há erro na página após login
         if verificar_e_reiniciar_se_erro(browser):
-            raise Exception("Erro detectado após login - navegador será reiniciado")
+            print("Navegador foi fechado devido a erro. Saindo da função...")
+            return False, None
 
         print("Aguardando botão 'Ciente' aparecer...")
         botao_ciente = WebDriverWait(browser, TIME_TO_WAIT).until(
@@ -272,7 +289,8 @@ def main():
 
         # Verifica se há erro após clicar no botão Ciente
         if verificar_e_reiniciar_se_erro(browser):
-            raise Exception("Erro detectado após botão Ciente - navegador será reiniciado")
+            print("Navegador foi fechado devido a erro. Saindo da função...")
+            return False, None
 
         print("Navegando para menu de matrícula...")
         elemento = WebDriverWait(browser, TIME_TO_WAIT).until(
@@ -292,7 +310,8 @@ def main():
 
         # Verifica se há erro após navegar para a página de matrícula
         if verificar_e_reiniciar_se_erro(browser):
-            raise Exception("Erro detectado na página de matrícula - navegador será reiniciado")
+            print("Navegador foi fechado devido a erro. Saindo da função...")
+            return False, None
 
         print("Preenchendo nome da matéria...")
         botao_nome_materia = WebDriverWait(browser, TIME_TO_WAIT).until(EC.element_to_be_clickable((By.ID, 'form:txtNome')))
@@ -304,28 +323,30 @@ def main():
             )
         )
 
-        search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
+        search_input_nome_materia.send_keys('ALGEBRA 1')
         search_input_nome_materia.send_keys(Keys.ENTER)
 
         # Verifica se há erro após preencher o nome da matéria
         if verificar_e_reiniciar_se_erro(browser):
-            raise Exception("Erro detectado após preencher matéria - navegador será reiniciado")
+            print("Navegador foi fechado devido a erro. Saindo da função...")
+            return False, None
 
-        '''
+        
         search_input_horario_materia = WebDriverWait(browser, TIME_TO_WAIT).until(
             EC.presence_of_element_located(
                 (By.ID, 'form:txtHorario')
             )
         )    
-        search_input_horario_materia.send_keys('5M5 5T1')
+        search_input_horario_materia.send_keys('36M12')
 
         search_input_horario_materia.send_keys(Keys.ENTER)
-        '''
+        
         
         print("Aguardando botão 'Selecionar Turma' ficar disponível...")
         # Aguarda o botão ficar disponível com refresh automático
         if not aguardar_botao_com_refresh(browser):
-            raise Exception("Botão não ficou disponível após todas as tentativas")
+            print("Função aguardar_botao_com_refresh retornou False. Saindo da função...")
+            return False, None
 
         try:
             # Localiza o campo de entrada pelo ID
@@ -422,7 +443,7 @@ def main():
                     raise Exception(f"Todas as tentativas de preenchimento falharam: {e3}")
 
         print("Processo de matrícula concluído com sucesso!")
-        return True
+        return True, browser
 
     except Exception as e:
         print(f"Erro durante a execução: {e}")
@@ -436,7 +457,8 @@ def main():
             except:
                 print("Elemento 'sair-sistema' não encontrado.")
         
-        raise  # Re-lança a exceção para o loop externo
+        # Retorna False e o browser para que possa ser fechado no loop principal
+        return False, browser
 
 if __name__ == '__main__':
     print("Script iniciado! Para parar, pressione Ctrl+C no terminal.")
@@ -450,35 +472,62 @@ if __name__ == '__main__':
             print("Iniciando nova tentativa de matrícula...")
             print(f"{'='*50}")
             
-            success = main()
+            # Chama main() e captura o browser retornado
+            success, current_browser = main()
+            browser = current_browser  # Atualiza a variável browser
+            
             if success:
                 print("Processo concluído com sucesso!")
                 print("Matrícula realizada! Encerrando o script.")
                 if browser:
                     try:
                         browser.quit()
-                    except:
-                        pass
+                        print("Navegador fechado com sucesso.")
+                    except Exception as e:
+                        print(f"Erro ao fechar navegador: {e}")
                 break  # Para o loop após sucesso
+            else:
+                # Se main() retornou False, significa que houve erro mas o browser foi fechado
+                if current_browser is None:
+                    print("Processo falhou e navegador foi fechado. Tentando novamente...")
+                    continue
+                else:
+                    print("Processo falhou mas navegador ainda está aberto. Fechando...")
+                    if browser:
+                        try:
+                            browser.quit()
+                            print("Navegador fechado com sucesso.")
+                        except Exception as e:
+                            print(f"Erro ao fechar navegador: {e}")
+                    continue
                 
         except KeyboardInterrupt:
             print("\n\nScript interrompido pelo usuário (Ctrl+C). Encerrando...")
             if browser:
                 try:
                     browser.quit()
-                except:
-                    pass
+                    print("Navegador fechado com sucesso.")
+                except Exception as e:
+                    print(f"Erro ao fechar navegador: {e}")
             break
         except Exception as e:
             print(f"Erro detectado: {e}")
             
-            # Garante que o navegador seja fechado
+            # Garante que o navegador seja fechado ANTES de tentar novamente
             if browser:
                 try:
-                    print("Fechando navegador...")
+                    print("Fechando navegador antigo...")
                     browser.quit()
-                except:
-                    pass
+                    print("Navegador antigo fechado com sucesso.")
+                    # Aguarda um pouco para garantir que o processo seja finalizado
+                    time.sleep(2)
+                except Exception as close_error:
+                    print(f"Erro ao fechar navegador: {close_error}")
+                    # Força o fechamento se necessário
+                    try:
+                        browser.close()
+                    except:
+                        pass
             
-            print(f"Aguardando 20 segundos antes de tentar novamente...")
-            time.sleep(2)
+            print(f"Aguardando 0.2 segundos antes de tentar novamente...")
+            time.sleep(0.2)

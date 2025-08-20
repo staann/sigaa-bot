@@ -1,0 +1,9 @@
+# Dependências para o bot de automação web
+# Selenium - Framework principal para automação de navegador
+selenium>=4.15.0
+
+# WebDriver Manager (opcional, para gerenciar drivers automaticamente)
+webdriver-manager>=4.0.0
+
+# Pathlib (incluído no Python 3.4+, mas listado para compatibilidade)
+pathlib2>=2.3.7; python_version<"3.4"
