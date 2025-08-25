@@ -116,7 +116,7 @@ def aguardar_botao_com_refresh(browser, refresh_interval=1):
                 search_input_nome_materia = WebDriverWait(browser, 3).until(
                     EC.presence_of_element_located((By.ID, 'form:txtNome'))
                 )
-                search_input_nome_materia.send_keys('INTRODUÇÃO À UNB-ECO')
+                search_input_nome_materia.send_keys('ALGEBRA 1')
                 search_input_nome_materia.send_keys(Keys.ENTER)
                 print("Nome da matéria preenchido novamente com sucesso!")
                 
@@ -125,6 +125,16 @@ def aguardar_botao_com_refresh(browser, refresh_interval=1):
                     print("Navegador foi fechado após preencher matéria novamente. Saindo da função...")
                     browser = None  # Define como None para indicar que foi fechado
                     return False
+
+                search_input_horario_materia = WebDriverWait(browser, 3).until(
+                    EC.presence_of_element_located(
+                        (By.ID, 'form:txtHorario')
+                    )
+                )
+
+                search_input_horario_materia.send_keys('36M12')
+                search_input_horario_materia.send_keys(Keys.ENTER)
+                print("Horário da matéria preenchido novamente com sucesso!")
                 
             except Exception as nav_error:
                 print(f"Erro ao navegar após refresh: {nav_error}")
